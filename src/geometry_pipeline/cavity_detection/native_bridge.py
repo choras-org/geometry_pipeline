@@ -40,7 +40,8 @@ logger = logging.getLogger(__name__)
 
 # Installed by CMake into the package (see _native/CMakeLists.txt); VOLUME_DETECTOR_BIN overrides it.
 # importlib.resources (not __file__) so editable installs find it in site-packages too.
-_DEFAULT_BINARY = Path(str(files("geometry_pipeline") / "bin" / "volume_detector"))
+_BINARY_NAME = "volume_detector.exe" if os.name == "nt" else "volume_detector"
+_DEFAULT_BINARY = Path(str(files("geometry_pipeline") / "bin" / _BINARY_NAME))
 
 
 def native_detector_path() -> Optional[Path]:
