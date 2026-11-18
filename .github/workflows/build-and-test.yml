@@ -14,8 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        # rhino3dm==8.6.1 ships no wheels for Python 3.13
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
     defaults:
       run:
         shell: bash
