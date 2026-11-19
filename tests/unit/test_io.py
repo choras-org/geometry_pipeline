@@ -127,6 +127,28 @@ def test_geo_export_writes_line_loops(tmp_path, unit_cube):
     )
 
 
+def test_geo_export_physical_surface_tags_match_surfaces(tmp_path, unit_cube):
+    """Physical surface i holds Plane Surface i; the DG solver relies on this."""
+    import gmsh
+
+    # The .geo exporter reads its physical surface groups from the sibling .3dm.
+    MeshThreeDMExporter().write(unit_cube, tmp_path / "cube.3dm")
+    out = tmp_path / "cube.geo"
+    GmshGeoExporter(detect_cavities=False).write(unit_cube, out)
+
+    gmsh.initialize()
+    try:
+        gmsh.option.setNumber("General.Terminal", 0)
+        gmsh.open(str(out))
+        groups = gmsh.model.getPhysicalGroups(2)
+        entities = [list(gmsh.model.getEntitiesForPhysicalGroup(2, tag)) for _, tag in groups]
+    finally:
+        gmsh.finalize()
+
+    assert [tag for _, tag in groups] == [1, 2, 3, 4, 5, 6]
+    assert entities == [[1], [2], [3], [4], [5], [6]]
+
+
 # --- 3DM export --------------------------------------------------------------
 
 

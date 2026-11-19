@@ -215,6 +215,13 @@ class GmshGeoExporter:
                     tf.write(f"Plane Surface({sid}) = {{ {sid} }};\n")
                 tf.write("\n")
 
+                # Physical Surfaces, before any Physical Volume: Gmsh numbers physical
+                # groups in file order, and the DG solver needs surface group i == surface i.
+                ii = 1
+                for grp in material_to_id:
+                    tf.write(f'Physical Surface("{grp}") = {{ {str(ii)} }};\n')
+                    ii = ii + 1
+
                 # Surface Loop(s) + Volume(s)
                 if not cavities:
                     total_surfaces = len(face_line_loops)
@@ -267,12 +274,6 @@ class GmshGeoExporter:
 
                     for cav_name, volume_id in physical_volumes:
                         tf.write(f'Physical Volume("{cav_name}") = {{ {volume_id} }};\n')
-
-                # Physical Surfaces
-                ii = 1
-                for grp in material_to_id:
-                    tf.write(f'Physical Surface("{grp}") = {{ {str(ii)} }};\n')
-                    ii = ii + 1
 
                 # Physical Lines
                 lines_all = ", ".join(str(i) for i in range(1, next_line_id))
