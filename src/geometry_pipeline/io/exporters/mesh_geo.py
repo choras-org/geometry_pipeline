@@ -2,18 +2,78 @@
 
 from __future__ import annotations
 
+import itertools
 import logging
 import os
 import tempfile
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 import rhino3dm
 
 from geometry_pipeline.core.ir import Cavity, Geometry, Mesh
+from geometry_pipeline.core.tolerances import Tolerances
 from geometry_pipeline.geometry_math.geometry_math import uedge
 
 logger = logging.getLogger(__name__)
+
+
+def _physical_surface_names(
+    face_verts: List[List[int]],
+    points: List[Tuple[float, float, float]],
+    model,
+) -> List[Optional[str]]:
+    """Id of the `.3dm` object each surface was made from, in surface order.
+
+    Matched by geometry, not by position: the `.3dm` can list its objects in another
+    order (the OBJ exporter sorts faces by material) or still hold faces the pipeline
+    removed. An object matches a surface when each of its corners lies within
+    ``vertex_merge`` of one of the surface's vertices, per axis like the vertex dedup;
+    the T-junction fix may have added vertices to the surface. The object with the most
+    corners wins, each object is used once, and ``None`` marks a surface without one.
+    """
+    tol = Tolerances().vertex_merge
+    objects = []
+    for obj in model.Objects:
+        if isinstance(obj.Geometry, rhino3dm.Mesh):
+            v = obj.Geometry.Vertices
+            corners = np.unique([[v[k].X, v[k].Y, v[k].Z] for k in range(len(v))], axis=0)
+            if len(corners):
+                objects.append((str(obj.Attributes.Id), corners))
+
+    # Points within `tol` per axis lie in the same or a neighbouring grid cell.
+    def cell(p):
+        return tuple(int(c) for c in np.floor(p / tol))
+
+    objects_by_cell = defaultdict(list)
+    for k, (_, corners) in enumerate(objects):
+        objects_by_cell[cell(corners[0])].append(k)
+    neighbours = list(itertools.product((-1, 0, 1), repeat=3))
+
+    pts = np.asarray(points, dtype=float)
+    candidates = []
+    for i, verts in enumerate(face_verts):
+        face_pts = pts[np.asarray(verts) - 1]
+        near = set()
+        for p in face_pts:
+            c = cell(p)
+            for d in neighbours:
+                near.update(objects_by_cell.get((c[0] + d[0], c[1] + d[1], c[2] + d[2]), ()))
+        for k in near:
+            corners = objects[k][1]
+            close = np.all(np.abs(corners[:, None, :] - face_pts[None, :, :]) < tol, axis=2)
+            if close.any(axis=1).all():
+                candidates.append((-len(corners), i, k))
+
+    names: List[Optional[str]] = [None] * len(face_verts)
+    used = set()
+    for _, i, k in sorted(candidates):
+        if names[i] is None and k not in used:
+            names[i] = objects[k][0]
+            used.add(k)
+    return names
 
 
 class GmshGeoExporter:
@@ -159,25 +219,24 @@ class GmshGeoExporter:
                 "3DM model not found at %s; continuing without material mapping", three_dm_path
             )
 
-        # Material mapping for later use
-        material_to_id = {}
+        # Physical surface names: the `.3dm` object id of each surface, which the
+        # frontend assigns materials to.
+        surface_names: List[Optional[str]] = []
         if model is not None:
-            for obj in model.Objects:  # type: ignore[attr-defined]
-                if isinstance(obj.Geometry, rhino3dm.Mesh):
-                    material_name = obj.Geometry.GetUserString("material_name")  # type: ignore[attr-defined]
-                    if material_name:
-                        material_to_id[f"{obj.Attributes.Id}"] = material_name
+            surface_names = _physical_surface_names(
+                [_face_verts(face) for face in faces], unique_vertices, model
+            )
+            unmatched = [sid for sid, name in enumerate(surface_names, start=1) if name is None]
+            if unmatched:
+                logger.error(
+                    "No object in %s matches surface(s) %s of %s; written as "
+                    "unmatched_surface_<id>, which simulations can't assign a material to",
+                    three_dm_path,
+                    unmatched,
+                    geo_file,
+                )
         else:
-            logger.debug("No 3DM model available; material_to_id mapping will be empty.")
-
-        # Physical surface groups: material -> list of 0-based face indices
-        physical_surfaces_dict: Dict = {}
-        for idx, face in enumerate(faces):
-            physical_surfaces_dict.setdefault(getattr(face, "material", None), []).append(idx)
-
-        logger.info(
-            "Physical surfaces: %s", {mat: len(ids) for mat, ids in physical_surfaces_dict.items()}
-        )
+            logger.debug("No 3DM model available; writing no physical surfaces.")
 
         # Write GEO to a temporary file then atomically replace the target.
         target_path = Path(geo_file)
@@ -217,10 +276,10 @@ class GmshGeoExporter:
 
                 # Physical Surfaces, before any Physical Volume: Gmsh numbers physical
                 # groups in file order, and the DG solver needs surface group i == surface i.
-                ii = 1
-                for grp in material_to_id:
-                    tf.write(f'Physical Surface("{grp}") = {{ {str(ii)} }};\n')
-                    ii = ii + 1
+                for sid, name in enumerate(surface_names, start=1):
+                    tf.write(
+                        f'Physical Surface("{name or f"unmatched_surface_{sid}"}") = {{ {sid} }};\n'
+                    )
 
                 # Surface Loop(s) + Volume(s)
                 if not cavities:
