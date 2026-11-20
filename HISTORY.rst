@@ -5,6 +5,16 @@ History
 Unreleased
 ----------
 
+Bug Fixes
+~~~~~~~~~
+
+- Orient faces outward per connected piece instead of flipping all faces when most point inward. Neighbouring faces are made consistent, the room's normals point out of the room and an obstacle's into the obstacle; faces wound against their neighbours were previously kept as they were in the ``.geo`` export (ported from CHORAS backend #150)
+
+Deprecations
+~~~~~~~~~~~~
+
+- ``FlipFacesIfMajorityInwardRepair`` is deprecated in favour of ``OrientFacesOutwardRepair`` and no longer used by the default profile. It will be removed in 0.2.0
+
 0.1.1 (2026-11-19)
 ------------------
 

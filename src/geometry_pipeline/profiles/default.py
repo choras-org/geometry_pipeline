@@ -18,7 +18,7 @@ from geometry_pipeline.core.tolerances import Tolerances
 from geometry_pipeline.io.registry import ExporterRegistry
 from geometry_pipeline.repairs.mesh.deduplicate_vertices import DeduplicateVerticesRepair
 from geometry_pipeline.repairs.mesh.fix_t_junctions import FixTJunctionsIterativeRepair
-from geometry_pipeline.repairs.mesh.orient_outward import FlipFacesIfMajorityInwardRepair
+from geometry_pipeline.repairs.mesh.orient_outward import OrientFacesOutwardRepair
 from geometry_pipeline.repairs.mesh.remove_degenerate_faces import RemoveZeroAreaFaceRepair
 from geometry_pipeline.repairs.mesh.repair_intersections import (
     RepairPlcSingleSplitsRepair,
@@ -81,7 +81,7 @@ def _default_stages(
         # tjunc measured here = ORIGINAL count (orient does not change tjuncs)
         Stage(
             name="orient",
-            repairs=[FlipFacesIfMajorityInwardRepair()],  # type: ignore[list-item]
+            repairs=[OrientFacesOutwardRepair()],  # type: ignore[list-item]
             post_validators=[tjunc],
         ),
         # === INSPECT CHECKPOINT ===

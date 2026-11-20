@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import math
 from collections import defaultdict, deque
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from geometry_pipeline.core.ir import Face
 from geometry_pipeline.geometry_math.geometry_math import (
@@ -40,10 +40,8 @@ from geometry_pipeline.repairs.mesh._common import (
     compact_vertices_and_remove_unused,
     get_or_create_vertex,
     move_touching_endpoint_off_face,
+    orient_faces_outward,
     polygon_centroid,
-)
-from geometry_pipeline.repairs.mesh._common import (
-    flip_all_faces_if_majority_inward as _flip_all_faces_if_majority_inward,
 )
 
 logger = logging.getLogger(__name__)
@@ -321,21 +319,9 @@ def _build_edge_face_adjacency(faces: List[Face]) -> Dict[Tuple[int, int], List[
 # ------ Repair Segment-Face Intersection
 
 
-def flip_all_faces_if_majority_inward(
-    faces: List[Face],
-    unique_vertices: List[Tuple[float, float, float]],
-    room_center: Tuple[float, float, float],
-    logger=None,
-) -> bool:
-    # Re-exported from the shared helper so existing call sites in this module
-    # keep working. Single source of truth lives in ``repairs._common``.
-    return _flip_all_faces_if_majority_inward(faces, unique_vertices, room_center, logger=logger)
-
-
 def repair_plc_single_splits_iterative(
     faces: List[Face],
     points: List[Tuple[float, float, float]],
-    room_center: Tuple[float, float, float],
     *,
     plc_report_supplier,
     logger=None,
@@ -501,16 +487,9 @@ def repair_plc_single_splits_iterative(
             logger.info("[PLC REPAIR] applied iter=%d diag=%s", it, diag)
 
         # re-orient after topology change
-        diag_orient = orient_faces_consistently_by_adjacency(faces, logger=logger)
+        diag_orient = orient_faces_outward(faces, points)
         if logger:
             logger.info("[ORIENT AFTER PLC REPAIR] iter=%d diag=%s", it, diag_orient)
-
-        flip_all_faces_if_majority_inward(
-            faces,
-            points,
-            room_center,
-            logger=logger,
-        )
 
     summary["stopped_reason"] = "max_iters_reached"
     if logger:
@@ -1101,117 +1080,6 @@ def repair_multi_hit_face_collinear_chain(
     if logger:
         logger.info("[PLC REPAIR] structured collinear split face=%d", facet_fid)
     return new_faces, points, True, diag
-
-
-def orient_faces_consistently_by_adjacency(
-    faces: List[Face],
-    logger=None,
-) -> Dict[str, Any]:
-    edge_to_uses: Dict[Tuple[int, int], List[Tuple[int, Tuple[int, int]]]] = defaultdict(list)
-
-    for fi, f in enumerate(faces):
-        vs = _face_vids(f)
-        n = len(vs)
-        if n < 2:
-            continue
-        for i in range(n):
-            a = vs[i]
-            b = vs[(i + 1) % n]
-            edge_to_uses[uedge(a, b)].append((fi, (a, b)))
-
-    boundary_edges = 0
-    nonmanifold_edges = 0
-    for e, uses in edge_to_uses.items():
-        if len(uses) == 1:
-            boundary_edges += 1
-        elif len(uses) > 2:
-            nonmanifold_edges += 1
-
-    if logger:
-        logger.info(
-            "[ORIENT] edges=%d boundary=%d nonmanifold=%d",
-            len(edge_to_uses),
-            boundary_edges,
-            nonmanifold_edges,
-        )
-
-    face_adj: Dict[int, List[Tuple[int, Tuple[int, int], Tuple[int, int], Tuple[int, int]]]] = (
-        defaultdict(list)
-    )
-
-    for e, uses in edge_to_uses.items():
-        if len(uses) != 2:
-            continue
-        (f0, dir0), (f1, dir1) = uses
-        face_adj[f0].append((f1, e, dir0, dir1))
-        face_adj[f1].append((f0, e, dir1, dir0))
-
-    visited = [False] * len(faces)
-    flipped = [False] * len(faces)
-    flipped_count = 0
-    components = 0
-
-    def flip_face(fi: int):
-        nonlocal flipped_count
-        _reverse_face_vids(faces[fi])
-        flipped[fi] = not flipped[fi]
-        flipped_count += 1
-
-    for seed in range(len(faces)):
-        if visited[seed]:
-            continue
-
-        components += 1
-        visited[seed] = True
-        q = deque([seed])
-
-        while q:
-            fa = q.popleft()
-            for fb, e, dir_a, dir_b in face_adj.get(fa, []):
-                if not visited[fb]:
-
-                    def current_edge_dir(
-                        face_verts: List[int], undirected_edge: Tuple[int, int]
-                    ) -> Optional[Tuple[int, int]]:
-                        u, v = undirected_edge
-                        n = len(face_verts)
-                        for i in range(n):
-                            a = face_verts[i]
-                            b = face_verts[(i + 1) % n]
-                            if (a == u and b == v) or (a == v and b == u):
-                                return (a, b)
-                        return None
-
-                    da = current_edge_dir(_face_vids(faces[fa]), e)
-                    db = current_edge_dir(_face_vids(faces[fb]), e)
-
-                    if da is None or db is None:
-                        if logger:
-                            logger.warning("[ORIENT] missing edge %s in fa=%d or fb=%d", e, fa, fb)
-                        visited[fb] = True
-                        q.append(fb)
-                        continue
-
-                    if da == db:
-                        flip_face(fb)
-                        if logger:
-                            logger.debug(
-                                "[ORIENT] flipped face fid=%d to fix shared edge %s",
-                                _face_fid(faces[fb], idx=fb),
-                                e,
-                            )
-
-                    visited[fb] = True
-                    q.append(fb)
-                else:
-                    pass
-
-    return {
-        "components": components,
-        "flipped_faces": flipped_count,
-        "boundary_edges": boundary_edges,
-        "nonmanifold_edges": nonmanifold_edges,
-    }
 
 
 def trim_component_against_facet_plane(

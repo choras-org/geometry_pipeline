@@ -7,7 +7,10 @@ Kind-agnostic infrastructure (`base`, `_common`) stays at this top level.
 from geometry_pipeline.repairs.mesh.compact_vertices import CompactVerticesRepair
 from geometry_pipeline.repairs.mesh.deduplicate_vertices import DeduplicateVerticesRepair
 from geometry_pipeline.repairs.mesh.fix_t_junctions import FixTJunctionsIterativeRepair
-from geometry_pipeline.repairs.mesh.orient_outward import FlipFacesIfMajorityInwardRepair
+from geometry_pipeline.repairs.mesh.orient_outward import (
+    FlipFacesIfMajorityInwardRepair,
+    OrientFacesOutwardRepair,
+)
 from geometry_pipeline.repairs.mesh.remove_degenerate_faces import RemoveZeroAreaFaceRepair
 from geometry_pipeline.repairs.mesh.repair_intersections import (
     RepairPlcByOffsetRepair,
@@ -21,6 +24,7 @@ __all__ = [
     "DeduplicateVerticesRepair",
     "FixTJunctionsIterativeRepair",
     "FlipFacesIfMajorityInwardRepair",
+    "OrientFacesOutwardRepair",
     "RemoveZeroAreaFaceRepair",
     "RepairPlcByOffsetRepair",
     "RepairPlcSingleSplitsRepair",

@@ -15,7 +15,10 @@ from geometry_pipeline.core.issues import IssueKind
 from geometry_pipeline.repairs.mesh.compact_vertices import CompactVerticesRepair
 from geometry_pipeline.repairs.mesh.deduplicate_vertices import DeduplicateVerticesRepair
 from geometry_pipeline.repairs.mesh.fix_t_junctions import FixTJunctionsIterativeRepair
-from geometry_pipeline.repairs.mesh.orient_outward import FlipFacesIfMajorityInwardRepair
+from geometry_pipeline.repairs.mesh.orient_outward import (
+    FlipFacesIfMajorityInwardRepair,
+    OrientFacesOutwardRepair,
+)
 from geometry_pipeline.repairs.mesh.remove_degenerate_faces import RemoveZeroAreaFaceRepair
 from geometry_pipeline.repairs.mesh.sort_vertices import SortVerticesDeterministicallyRepair
 from geometry_pipeline.validators.mesh.t_junctions import TJunctionsValidator
@@ -96,17 +99,55 @@ def test_sort_vertices_is_deterministic(ctx):
 # --- orient_outward ----------------------------------------------------------
 
 
-def test_orient_outward_leaves_outward_cube_untouched(ctx, unit_cube):
-    _, result = FlipFacesIfMajorityInwardRepair().apply(unit_cube, [], ctx)
-    assert result.details["flipped_all"] is False
+def test_orient_outward_leaves_outward_cube_untouched(ctx, unit_cube, cube_faces):
+    new_mesh, result = OrientFacesOutwardRepair().apply(unit_cube, [], ctx)
+    assert result.details["flipped_faces"] == 0
+    assert [f.vertex_indices for f in new_mesh.faces] == cube_faces
 
 
-def test_orient_outward_flips_inward_cube(ctx, unit_cube):
+def test_orient_outward_flips_inward_cube(ctx, unit_cube, cube_faces):
     inward = make_mesh(
         [(v.x, v.y, v.z) for v in unit_cube.vertices],
         [list(reversed(f.vertex_indices)) for f in unit_cube.faces],
     )
-    _, result = FlipFacesIfMajorityInwardRepair().apply(inward, [], ctx)
+    new_mesh, result = OrientFacesOutwardRepair().apply(inward, [], ctx)
+    assert result.details["flipped_faces"] == 6
+    assert result.details["pieces"] == 1
+    assert result.details["closed_pieces"] == 1
+    assert [f.vertex_indices for f in new_mesh.faces] == cube_faces
+
+
+def test_orient_outward_fixes_some_inverted_faces(ctx, unit_cube, cube_faces):
+    # Bottom and left inverted: a majority vote over all faces keeps them as they are.
+    faces = [list(f.vertex_indices) for f in unit_cube.faces]
+    faces[0].reverse()
+    faces[5].reverse()
+    mixed = make_mesh([(v.x, v.y, v.z) for v in unit_cube.vertices], faces)
+    new_mesh, result = OrientFacesOutwardRepair().apply(mixed, [], ctx)
+    assert result.details["flipped_faces"] == 2
+    assert [f.vertex_indices for f in new_mesh.faces] == cube_faces
+
+
+def test_flip_if_majority_inward_is_deprecated():
+    with pytest.warns(DeprecationWarning, match="OrientFacesOutwardRepair"):
+        FlipFacesIfMajorityInwardRepair()
+
+
+def test_flip_if_majority_inward_leaves_outward_cube_untouched(ctx, unit_cube):
+    with pytest.warns(DeprecationWarning):
+        repair = FlipFacesIfMajorityInwardRepair()
+    _, result = repair.apply(unit_cube, [], ctx)
+    assert result.details["flipped_all"] is False
+
+
+def test_flip_if_majority_inward_flips_inward_cube(ctx, unit_cube):
+    inward = make_mesh(
+        [(v.x, v.y, v.z) for v in unit_cube.vertices],
+        [list(reversed(f.vertex_indices)) for f in unit_cube.faces],
+    )
+    with pytest.warns(DeprecationWarning):
+        repair = FlipFacesIfMajorityInwardRepair()
+    _, result = repair.apply(inward, [], ctx)
     assert result.details["flipped_all"] is True
 
 
