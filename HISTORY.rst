@@ -9,7 +9,7 @@ Bug Fixes
 ~~~~~~~~~
 
 - Orient faces outward per connected piece (#4)
-- Fix materials assigned to the wrong surfaces in the ``.geo`` export
+- Fix materials assigned to the wrong surfaces in the ``.geo`` export (#5)
 
 Deprecations
 ~~~~~~~~~~~~
