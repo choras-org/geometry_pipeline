@@ -33,7 +33,6 @@ from geometry_pipeline.repairs.mesh._intersection_repairs import (
     _split_face_at_single_interior_vertex,
     _visible_boundary_vertices_from_point,
     collect_face_component_from_seed_faces,
-    orient_faces_consistently_by_adjacency,
     repair_multi_hit_face_collinear_chain,
     repair_plc_by_offset_iterative,
     repair_plc_single_splits_iterative,
@@ -293,7 +292,7 @@ def test_plc_single_splits_iterative_applies_and_converges():
         return [_endpoint_report()] if calls["n"] == 1 else []
 
     _faces, _points, changed, summary = repair_plc_single_splits_iterative(
-        faces, list(TRI_PTS), (0.5, 0.5, 5.0), plc_report_supplier=supplier
+        faces, list(TRI_PTS), plc_report_supplier=supplier
     )
     assert changed is True
     assert summary["applied_repairs"] == 1
@@ -358,12 +357,3 @@ def test_repair_multi_hit_collinear_chain_splits_face():
     assert changed is True
     assert diag["status"] == "ok"
     assert len(new_faces) == 2  # face replaced by two sub-faces
-
-
-# --- Orientation by adjacency ------------------------------------------------
-
-
-def test_orient_faces_consistently_runs_on_cube(unit_cube):
-    faces = [_face(f.vertex_indices) for f in unit_cube.faces]
-    diag = orient_faces_consistently_by_adjacency(faces)
-    assert isinstance(diag, dict)

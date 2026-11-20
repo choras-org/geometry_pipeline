@@ -126,7 +126,6 @@ class RepairPlcSingleSplitsRepair(BaseRepair):
         result_tuple = repair_plc_single_splits_iterative(
             faces,
             points,
-            room_center_from_mesh(geom),
             logger=ctx.logger,
             max_iters=max_iters,
             planarity_tol_m=ctx.tolerances.planarity_split,

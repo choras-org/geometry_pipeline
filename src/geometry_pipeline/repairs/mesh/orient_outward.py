@@ -1,13 +1,16 @@
-"""Global outward-normal repair.
+"""Outward-normal repairs.
 
-If more faces point toward the room centre than away, flip every face.
-Cheap and catches the common "OBJ exporter inverted everything" case.
-For local edge-by-edge consistency see ``orient_faces_consistently_by_adjacency``
-in ``_intersection_repairs.py``.
+``OrientFacesOutwardRepair`` makes neighbouring faces agree, then orients each
+connected piece: the room's normals point out of the room, an obstacle's into
+the obstacle. See ``orient_faces_outward`` in ``_common.py``.
+
+``FlipFacesIfMajorityInwardRepair`` is deprecated: it flips every face when
+most point inward and keeps faces wound against their neighbours.
 """
 
 from __future__ import annotations
 
+import warnings
 from typing import ClassVar
 
 from geometry_pipeline.core.context import Context
@@ -17,14 +20,57 @@ from geometry_pipeline.core.report import RepairResult
 from geometry_pipeline.repairs.base import BaseRepair
 from geometry_pipeline.repairs.mesh._common import (
     flip_all_faces_if_majority_inward,
+    orient_faces_outward,
     room_center_from_mesh,
 )
 
 
+class OrientFacesOutwardRepair(BaseRepair):
+    name: ClassVar[str] = "orient_faces_outward"
+    accepts: ClassVar[set[str]] = {"mesh"}
+    handles: ClassVar[set[IssueKind]] = set()
+
+    def apply(
+        self,
+        geom: Mesh,
+        issues: list[Issue],
+        ctx: Context,
+        stage_name: str = "",
+    ) -> tuple[Mesh, RepairResult]:
+        self.ensure_accepts(geom)
+        faces = list(geom.faces)
+        points = [(v.x, v.y, v.z) for v in geom.vertices]
+        diag = orient_faces_outward(faces, points, logger=ctx.logger)
+        new_mesh = Mesh(
+            vertices=list(geom.vertices),
+            faces=faces,
+            materials=dict(geom.materials),
+            metadata=dict(geom.metadata),
+        )
+        result = self.make_result(
+            stage_name=stage_name,
+            before_count=len(faces),
+            after_count=len(faces),
+            details=diag,
+            issues=issues,
+        )
+        return new_mesh, result
+
+
 class FlipFacesIfMajorityInwardRepair(BaseRepair):
+    """Deprecated, use ``OrientFacesOutwardRepair``. Will be removed in 0.2.0."""
+
     name: ClassVar[str] = "flip_all_faces_if_majority_inward"
     accepts: ClassVar[set[str]] = {"mesh"}
     handles: ClassVar[set[IssueKind]] = set()
+
+    def __init__(self) -> None:
+        warnings.warn(
+            "FlipFacesIfMajorityInwardRepair is deprecated and will be removed in 0.2.0; "
+            "use OrientFacesOutwardRepair.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     def apply(
         self,
