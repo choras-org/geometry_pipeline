@@ -5,6 +5,11 @@ History
 Unreleased
 ----------
 
+Bug Fixes
+~~~~~~~~~
+
+- Write a single volume instead of failing when the cavity detector fails or times out (``VOLUME_DETECTOR_TIMEOUT``) (#6)
+
 0.1.2 (2026-11-20)
 ------------------
 
