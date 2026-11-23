@@ -108,17 +108,23 @@ def detect_cavities_native(
     faces,
     unique_vertices: Sequence[Tuple[float, float, float]],
     *,
-    timeout: float = 120.0,
+    timeout: Optional[float] = None,
 ) -> List[Cavity]:
     """Run the native detector and return detected cavities.
+
+    ``timeout`` (seconds) defaults to ``VOLUME_DETECTOR_TIMEOUT`` or 120.
 
     Raises
     ------
     FileNotFoundError
         If the native binary is not available.
     RuntimeError
-        If the native tool fails or produces no parseable output.
+        If the native tool fails, times out or produces no parseable output.
+    ValueError
+        If ``VOLUME_DETECTOR_TIMEOUT`` is not a number.
     """
+    if timeout is None:
+        timeout = float(os.environ.get("VOLUME_DETECTOR_TIMEOUT", 120.0))
     binary = native_detector_path()
     if binary is None:
         raise FileNotFoundError(
