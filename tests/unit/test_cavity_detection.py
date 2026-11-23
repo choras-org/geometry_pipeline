@@ -178,6 +178,25 @@ def test_detect_cavities_native_happy_path(monkeypatch, tmp_path):
     assert cavities[0].oriented_faces == [(0, 1), (1, -1)]
 
 
+def test_detect_cavities_native_timeout_from_env(monkeypatch, tmp_path):
+    binary = tmp_path / "volume_detector"
+    binary.write_text("#!/bin/sh\n")
+    monkeypatch.setattr(native_bridge, "native_detector_path", lambda: binary)
+    monkeypatch.setenv("VOLUME_DETECTOR_TIMEOUT", "5")
+    calls = []
+    fake_run = _fake_run_factory({"volumes": []})
+
+    def _recording_run(cmd, **kwargs):
+        calls.append(kwargs)
+        return fake_run(cmd, **kwargs)
+
+    monkeypatch.setattr(native_bridge.subprocess, "run", _recording_run)
+
+    detect_cavities_native([_face(1, 2, 3)], [(0, 0, 0), (1, 0, 0), (0, 1, 0)])
+
+    assert calls[0]["timeout"] == 5.0
+
+
 def test_detect_cavities_native_raises_when_binary_missing(monkeypatch):
     monkeypatch.setattr(native_bridge, "native_detector_path", lambda: None)
     with pytest.raises(FileNotFoundError):

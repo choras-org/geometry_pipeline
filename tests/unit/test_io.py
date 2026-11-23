@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from geometry_pipeline.cavity_detection import native_bridge
 from geometry_pipeline.core.ir import Mesh
 from geometry_pipeline.io.exporters.mesh_geo import GmshGeoExporter
 from geometry_pipeline.io.exporters.mesh_obj import MeshObjExporter
@@ -125,6 +126,25 @@ def test_geo_export_writes_line_loops(tmp_path, unit_cube):
     assert loop_count >= 6, (
         f"Expected ≥6 Line Loop definitions (cube has 6 faces), got {loop_count}"
     )
+
+
+def test_geo_export_single_volume_when_detection_fails(tmp_path, unit_cube, monkeypatch):
+    def _timed_out(faces, points):
+        raise RuntimeError("Native volume detector timed out after 120.0s.")
+
+    monkeypatch.setattr(native_bridge, "detect_cavities_native", _timed_out)
+    out = tmp_path / "cube.geo"
+    GmshGeoExporter(detect_cavities=True).write(unit_cube, out)
+
+    text = out.read_text()
+    assert text.count("\nVolume(") == 1
+    assert 'Physical Volume("RoomVolume")' in text
+
+
+def test_geo_export_raises_when_detector_missing(tmp_path, unit_cube, monkeypatch):
+    monkeypatch.setattr(native_bridge, "native_detector_path", lambda: None)
+    with pytest.raises(FileNotFoundError):
+        GmshGeoExporter(detect_cavities=True).write(unit_cube, tmp_path / "cube.geo")
 
 
 def test_geo_export_physical_surface_tags_match_surfaces(tmp_path, unit_cube):

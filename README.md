@@ -50,7 +50,9 @@ Key runtime dependencies (pinned in [pyproject.toml](pyproject.toml)): `numpy`,
 > Running with `detect_cavities=True` **requires** this binary — if it is
 > missing, cavity detection raises a `GeometryError` (there is no automatic
 > fallback). Set `VOLUME_DETECTOR_BIN` to use a binary built elsewhere, or
-> leave `detect_cavities=False` to skip it. A pure-Python voxel detector exists
+> leave `detect_cavities=False` to skip it. If the detector fails or runs
+> longer than `VOLUME_DETECTOR_TIMEOUT` seconds (default 120), the `.geo` is
+> written with a single volume and a warning is logged. A pure-Python voxel detector exists
 > but is only used for testing via an explicit `detection_mode="voxel"`.
 > See [the native volume detection guide](docs/NATIVE_VOLUME_DETECTION_GUIDE.md)
 > for how bounded regions are found and what the grid-based result does not

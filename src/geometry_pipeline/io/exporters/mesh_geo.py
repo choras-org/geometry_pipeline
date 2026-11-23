@@ -364,9 +364,13 @@ class GmshGeoExporter:
     def _run_detection(self, faces, points) -> Optional[List[Cavity]]:
         mode = self.detection_mode
         if mode == "native":
-            # In production we require the native detector; propagate errors
-            # rather than silently falling back to the Python voxelizer.
-            return self._run_native_detection(faces, points)
+            # A missing binary (FileNotFoundError) is a broken install and must
+            # stay an error; only a failed run falls back to a single volume.
+            try:
+                return self._run_native_detection(faces, points)
+            except RuntimeError as exc:
+                logger.warning("Cavity detection failed, writing a single volume: %s", exc)
+                return None
         elif mode == "voxel":
             return self._run_voxel_detection(faces, points)
         else:
@@ -375,8 +379,8 @@ class GmshGeoExporter:
     def _run_native_detection(self, faces, points) -> Optional[List[Cavity]]:
         """Return cavities from the native detector.
 
-        Raises when the native binary is missing or detection fails so the
-        native binary is a hard requirement for cavity detection.
+        Raises ``FileNotFoundError`` when the native binary is missing and
+        ``RuntimeError`` when detection fails (see ``_run_detection``).
         """
         from ...cavity_detection.native_bridge import detect_cavities_native
 
